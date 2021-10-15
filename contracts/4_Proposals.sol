@@ -77,7 +77,6 @@ contract Proposals {
     // Receipts by Id
     mapping (uint => mapping (address => Receipt)) public receiptsById;
 
-
     
 
     /// @notice Ballot receipt record for a voter
@@ -89,7 +88,7 @@ contract Proposals {
         bool support;
 
         //  The number of votes the voter had, which were cast
-        uint96 votes;
+        uint256 votes;
     }
 
     /// @notice Possible states that a proposal may be in
@@ -122,9 +121,11 @@ contract Proposals {
         uint endBlock, 
         string description
     );
+
+    /// @notice An event emitted when a vote has been cast on a proposal
+    event VoteCast(address voter, uint proposalId, bool support, uint votes);
+
     
-
-
     constructor(address token_, address guardian_) {
         token = TokenInterface(token_);
         guardian = guardian_;
@@ -143,7 +144,6 @@ contract Proposals {
 
         require(token.getPriorVotes(msg.sender, block.number - 1) > proposalThreshold(), "Proposals::propose: proposer votes below proposal threshold");
         priorVotes = token.getPriorVotes(msg.sender, block.number - 1);
-
 
         require(targets.length == values.length && targets.length == signatures.length && targets.length == calldatas.length, "Proposals::propose: proposal function information arity mismatch");
         require(targets.length != 0, "Proposals::propose: must provide actions");
@@ -185,6 +185,15 @@ contract Proposals {
         return newProposal.id;
     }
 
+    function getActions(uint proposalId) public view returns (address[] memory targets, uint[] memory values, string[] memory signatures, bytes[] memory calldatas) {
+        Proposal storage p = proposals[proposalId];
+        return (p.targets, p.values, p.signatures, p.calldatas);
+    }
+
+    function getReceipt(uint proposalId, address voter) public view returns (Receipt memory) {
+        return receiptsById[proposalId][voter];
+    }
+
     function state(uint proposalId) public view returns (ProposalState) {
         require(proposalCount >= proposalId && proposalId > 0, "Proposals::state: invalid proposal id");
         Proposal storage proposal = proposals[proposalId];
@@ -207,6 +216,31 @@ contract Proposals {
         }
     }
 
+    function castVote(uint proposalId, bool support) public {
+        return _castVote(msg.sender, proposalId, support);
+    }
+
+    function _castVote(address voter, uint proposalId, bool support) internal {
+        require(state(proposalId) == ProposalState.Active, "Proposals::_castVote: voting is closed");
+        Proposal storage proposal = proposals[proposalId];
+        Receipt storage receipt = receiptsById[proposal.id][voter];
+
+        require(receipt.hasVoted == false, "Proposals::_castVote: voter already voted");
+
+        uint256 votes = token.getPriorVotes(voter, proposal.startBlock);
+// check when votes restart
+        if (support) {
+            proposal.forVotes = proposal.forVotes + votes;
+        } else {
+            proposal.againstVotes = proposal.againstVotes + votes;
+        }
+
+        receipt.hasVoted = true;
+        receipt.support = support;
+        receipt.votes = votes;
+
+        emit VoteCast(voter, proposalId, support, votes);
+    }
 }
     
 interface TokenInterface {
