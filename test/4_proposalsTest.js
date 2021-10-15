@@ -1,3 +1,8 @@
+const { 
+  time
+} = require('@openzeppelin/test-helpers'); 
+
+
 const Proposals = artifacts.require('Proposals.sol');
 const GovToken = artifacts.require('GovToken.sol');
 
@@ -12,13 +17,14 @@ contract('Proposals', async (accounts) => {
 	const description = 'description of the proposal'
 
 	beforeEach(async () => {
-		this.token = await GovToken.new(web3.utils.toWei('10001'));
+		this.token = await GovToken.new(web3.utils.toWei('20000'));
 		const govTokenAddress = await this.token.address;
 		proposal = await Proposals.new(govTokenAddress, guardian);
 	});
 
+/**
 	describe('proposals', () => {
-/*
+
 		it('should create new proposal', async () => {
 			
 			await this.token.delegate(proposer, {from: deployer})
@@ -36,7 +42,7 @@ contract('Proposals', async (accounts) => {
 
 		});
 
-*/
+
 		it('should register proposal properly', async () => {
 			
 			await this.token.delegate(proposer, {from: deployer});
@@ -142,8 +148,95 @@ contract('Proposals', async (accounts) => {
 		    assert.equal(threw, true);
 		});
 
+	});
 
 
+	describe('voting system', () => {
 
+		it('should not allow to vote proposals that are not Active', async() => {
+//change this delegation, it should be amount + delegates
+			const amountToVote = 1000;
+			await this.token.transfer(target2, amountToVote, {from: deployer});
+			await this.token.delegate(target1, {from: target2});
+			
+			await this.token.delegate(proposer, {from: deployer});
+			await proposal.propose(targets, values, signatures, calldatas, description, {from: proposer});
+			
+			try {
+		    	await proposal.castVote(1, true, {from: target1});
+		      } catch (e) {
+		      threw = true;
+		    }
+		    assert.equal(threw, true);
+		    
+//I would like to do assert.equal(e, "Proposals::_castVote: voting is closed"); but IDK how to handle e 		    
+		    
+			await time.increase(time.duration.days(2));
+
+			await proposal.castVote(1, true, {from: target1});
+
+			const proposalVoted = await proposal.proposals.call(1);
+			const amountVoted = proposalVoted.forVotes.toString();
+			assert.equal(amountVoted, amountToVote.toString());			
+
+		});
+
+		it('checking positive and negative voting', async() => {
+//change this delegation, it should be amount + delegates
+			const amountToVoteFor = 1000;
+			const amountToVoteAgainst = 750;
+			
+			await this.token.transfer(target3, amountToVoteFor, {from: deployer});
+			await this.token.delegate(target1, {from: target3});
+			
+			await this.token.transfer(target4, amountToVoteAgainst, {from: deployer});
+			await this.token.delegate(target2, {from: target4});
+			
+			await this.token.delegate(proposer, {from: deployer});
+			await proposal.propose(targets, values, signatures, calldatas, description, {from: proposer});
+		    
+			await time.increase(time.duration.days(2));
+
+			await proposal.castVote(1, true, {from: target1});
+			await proposal.castVote(1, false, {from: target2});
+
+			const proposalVoted = await proposal.proposals.call(1);
+			
+			const amountVotedFor = proposalVoted.forVotes.toString();
+			const amountVotedAgainst = proposalVoted.againstVotes.toString();
+			assert.equal(amountVotedFor, amountToVoteFor.toString());
+			assert.equal(amountVotedAgainst, amountToVoteAgainst.toString());
+		});
+
+// I would like to make it to be able to vote certain amount of the tokens. No necesarily
+// all the tokens involved.
+// I would love to do quadratic voting
+// We still need to define time to start voting and to stop
+
+	});
+**/
+	describe('auxiliar functions', () => {
+		it('should return actions from proposal', async () => {
+			await this.token.delegate(proposer, {from: deployer});
+			await proposal.propose(targets, values, signatures, calldatas, description, {from: proposer});
+			
+			const act = await proposal.getActions(1);
+			console.log(act);
+		});
+
+		it('should return actions from proposal', async () => {
+			await this.token.transfer(target2, 1000, {from: deployer});
+			await this.token.delegate(target1, {from: target2});
+			
+			await this.token.delegate(proposer, {from: deployer});
+			await proposal.propose(targets, values, signatures, calldatas, description, {from: proposer});
+				    
+			await time.increase(time.duration.days(2));
+
+			await proposal.castVote(1, true, {from: target1});
+
+			const rec = await proposal.getReceipt(1, target1);
+			console.log(rec);
+		});
 	});
 });
