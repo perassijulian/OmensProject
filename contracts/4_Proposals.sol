@@ -131,7 +131,9 @@ contract Proposals {
         guardian = guardian_;
     }
     
-    uint256 priorVotes;
+//    function flagF() public view returns (uint) {
+//        return flag;
+//    }
 
     function propose(
         address[] memory targets, 
@@ -141,10 +143,8 @@ contract Proposals {
         string memory description
     ) 
         public returns (uint) {
-
-        require(token.getPriorVotes(msg.sender, block.number - 1) > proposalThreshold(), "Proposals::propose: proposer votes below proposal threshold");
-        priorVotes = token.getPriorVotes(msg.sender, block.number - 1);
-
+        uint256 votingPower = (token.getPriorVotes(msg.sender, block.number - 1) + token.balanceOf(msg.sender)); //OIP 1
+        require( votingPower >= proposalThreshold()/10e17, "Proposals::propose: proposer votes below proposal threshold"); //OIP 1
         require(targets.length == values.length && targets.length == signatures.length && targets.length == calldatas.length, "Proposals::propose: proposal function information arity mismatch");
         require(targets.length != 0, "Proposals::propose: must provide actions");
         require(targets.length <= proposalMaxOperations(), "Proposals::propose: too many actions");
@@ -181,7 +181,17 @@ contract Proposals {
         proposals[newProposal.id] = newProposal;
         latestProposalIds[newProposal.proposer] = newProposal.id;
 
-        emit ProposalCreated(newProposal.id, msg.sender, targets, values, signatures, calldatas, startBlock, endBlock, description);
+        emit ProposalCreated(
+            newProposal.id, 
+            msg.sender, 
+            targets, 
+            values, 
+            signatures, 
+            calldatas, 
+            startBlock, 
+            endBlock, 
+            description
+        );
         return newProposal.id;
     }
 
@@ -226,8 +236,7 @@ contract Proposals {
         Receipt storage receipt = receiptsById[proposal.id][voter];
 
         require(receipt.hasVoted == false, "Proposals::_castVote: voter already voted");
-
-        uint256 votes = token.getPriorVotes(voter, proposal.startBlock);
+        uint256 votes = token.getPriorVotes(voter, proposal.startBlock) + token.balanceOf(voter); //OIP 1
 // check when votes restart
         if (support) {
             proposal.forVotes = proposal.forVotes + votes;
@@ -245,5 +254,6 @@ contract Proposals {
     
 interface TokenInterface {
     function getPriorVotes(address account, uint blockNumber) external view returns (uint256);
+    function balanceOf(address account) external view returns (uint256); //OIP 1
 
-} 
+}
